@@ -1,0 +1,63 @@
+{
+  "city_codes": {
+    "HCM": "SGN",
+    "HO CHI MINH": "SGN",
+    "SAI GON": "SGN",
+    "SGN": "SGN",
+    "DA NANG": "DAD",
+    "DANANG": "DAD",
+    "ĐÀ NẴNG": "DAD",
+    "DAD": "DAD",
+    "HANOI": "HAN",
+    "HÀ NỘI": "HAN",
+    "HAN": "HAN"
+  },
+  "routes": {
+    "SGN-DAD": {
+      "price_per_person_vnd": 1500000,
+      "airline": "Vietnam Airlines",
+      "duration_minutes": 85
+    },
+    "SGN-HAN": {
+      "price_per_person_vnd": 1200000,
+      "airline": "Vietjet",
+      "duration_minutes": 120
+    },
+    "HAN-DAD": {
+      "price_per_person_vnd": 1100000,
+      "airline": "Bamboo Airways",
+      "duration_minutes": 75
+    }
+  },
+  "hotels": {
+    "DAD": {
+      "standard": 1200000,
+      "deluxe": 2200000
+    },
+    "HAN": {
+      "standard": 1000000,
+      "deluxe": 1800000
+    },
+    "SGN": {
+      "standard": 900000,
+      "deluxe": 1600000
+    }
+  },
+  "promos": {
+    "SUMMER": {
+      "type": "percent",
+      "value": 10,
+      "description": "Giảm 10% tổng đơn (tối đa áp dụng cho vé+khách sạn)"
+    },
+    "FAMILY": {
+      "type": "fixed",
+      "value": 500000,
+      "description": "Giảm 500.000 VND cố định"
+    },
+    "NEWUSER": {
+      "type": "percent",
+      "value": 5,
+      "description": "Giảm 5% cho khách mới"
+    }
+  }
+}
