@@ -9,6 +9,8 @@ TOOL_REGISTRY: Dict[str, ToolFn] = {
     "get_hotel_rate": travel_tools.get_hotel_rate,
     "apply_promo": travel_tools.apply_promo,
     "search_attractions": travel_tools.search_attractions,
+    "estimate_trip_cost": travel_tools.estimate_trip_cost,
+    "get_weather_forecast": travel_tools.get_weather_forecast,
 }
 
 TOOL_SPECS: List[Dict[str, str]] = [
@@ -43,6 +45,26 @@ TOOL_SPECS: List[Dict[str, str]] = [
             "Use when the user asks what to visit, where to go, or tourist spots. "
             "Args: destination (city/province/place), query (optional), limit (int 1-10). "
             'Example: search_attractions(destination="Đà Nẵng", query="địa danh khu tham quan Đà Nẵng", limit=5)'
+        ),
+    },
+    {
+        "name": "estimate_trip_cost",
+        "description": (
+            "Estimate total trip cost (flight + hotel + optional promo) in one call. "
+            "Prefer when user asks total/budget/tổng chi phí for a full trip. "
+            "Args: origin, destination, depart_date (YYYY-MM-DD), passengers, nights, guests, "
+            "hotel_tier (standard|deluxe), promo_code (optional). "
+            'Example: estimate_trip_cost(origin="SGN", destination="DAD", depart_date="2026-07-15", '
+            'passengers=2, nights=2, guests=2, promo_code="SUMMER")'
+        ),
+    },
+    {
+        "name": "get_weather_forecast",
+        "description": (
+            "Mock weather forecast at the travel destination (no live API). "
+            "Use when user asks about weather, rain, temperature, what to pack. "
+            "Args: destination (city name or IATA), start_date (YYYY-MM-DD, optional), days (1-7). "
+            'Example: get_weather_forecast(destination="Đà Nẵng", start_date="2026-07-15", days=3)'
         ),
     },
 ]

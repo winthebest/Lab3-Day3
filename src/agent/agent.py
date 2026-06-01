@@ -36,8 +36,10 @@ Rules:
 - Map cities: HCM/Ho Chi Minh → SGN, Đà Nẵng/Da Nang → DAD, Hà Nội → HAN.
 - Dates: YYYY-MM-DD. "3 ngày 2 đêm" means nights=2 for hotel.
 - Multiply flight price by passengers; hotel by nights (not days).
-- After tools return numbers, compute subtotal then use apply_promo if user gave a code.
+- For full trip total (vé + khách sạn + promo), prefer estimate_trip_cost in one call.
+- Otherwise: search_flights + get_hotel_rate, then apply_promo if user gave a code.
 - If the user asks about places to visit, attractions, landmarks, or sightseeing, use search_attractions.
+- If the user asks about weather, rain, temperature, or what to wear, use get_weather_forecast for the destination.
 
 Output format (no markdown fences) — ALWAYS include Thought before Action or Final Answer:
 Thought: <reasoning>

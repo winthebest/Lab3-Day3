@@ -3,6 +3,7 @@ from typing import Optional
 
 from src.config import load_project_env
 from src.core.llm_provider import LLMProvider
+from src.core.llm_runtime import get_effective_config
 
 
 def get_llm_provider(
@@ -11,8 +12,11 @@ def get_llm_provider(
 ) -> LLMProvider:
     """Load only the selected provider (avoids importing llama_cpp when using cloud APIs)."""
     load_project_env()
-    provider = (provider or os.getenv("DEFAULT_PROVIDER", "google")).lower()
-    model = model or os.getenv("DEFAULT_MODEL", "gemini-1.5-flash")
+    if provider is None and model is None:
+        provider, model = get_effective_config()
+    else:
+        provider = (provider or os.getenv("DEFAULT_PROVIDER", "openai")).lower()
+        model = model or os.getenv("DEFAULT_MODEL", "gpt-4o")
 
     if provider == "openai":
         from src.core.openai_provider import OpenAIProvider

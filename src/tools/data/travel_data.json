@@ -59,5 +59,43 @@
       "value": 5,
       "description": "Giảm 5% cho khách mới"
     }
+  },
+  "weather": {
+    "DAD": {
+      "city_name": "Đà Nẵng",
+      "summary": "Mùa hè nắng nóng, thỉnh thoảng mưa rào buổi chiều.",
+      "travel_tip": "Nên mang kem chống nắng và áo mưa nhẹ cho buổi chiều.",
+      "forecasts": [
+        {"date": "2026-07-15", "condition": "Nắng", "temp_min_c": 27, "temp_max_c": 35, "rain_chance_pct": 15, "humidity_pct": 72},
+        {"date": "2026-07-16", "condition": "Nắng ráo", "temp_min_c": 28, "temp_max_c": 36, "rain_chance_pct": 10, "humidity_pct": 70},
+        {"date": "2026-07-17", "condition": "Mưa rào ngắn", "temp_min_c": 26, "temp_max_c": 33, "rain_chance_pct": 55, "humidity_pct": 80},
+        {"date": "2026-07-18", "condition": "Nhiều mây", "temp_min_c": 27, "temp_max_c": 34, "rain_chance_pct": 35, "humidity_pct": 76},
+        {"date": "2026-07-19", "condition": "Nắng", "temp_min_c": 28, "temp_max_c": 35, "rain_chance_pct": 20, "humidity_pct": 73}
+      ]
+    },
+    "HAN": {
+      "city_name": "Hà Nội",
+      "summary": "Nóng ẩm đầu hè, có ngày mưa dông.",
+      "travel_tip": "Sáng sớm và tối mát hơn — phù hợp đi phố cổ.",
+      "forecasts": [
+        {"date": "2026-07-15", "condition": "Nắng nóng", "temp_min_c": 28, "temp_max_c": 38, "rain_chance_pct": 25, "humidity_pct": 68},
+        {"date": "2026-07-16", "condition": "Mưa dông", "temp_min_c": 26, "temp_max_c": 34, "rain_chance_pct": 70, "humidity_pct": 82},
+        {"date": "2026-07-17", "condition": "Nhiều mây", "temp_min_c": 27, "temp_max_c": 35, "rain_chance_pct": 40, "humidity_pct": 75},
+        {"date": "2026-07-18", "condition": "Nắng", "temp_min_c": 28, "temp_max_c": 37, "rain_chance_pct": 20, "humidity_pct": 70},
+        {"date": "2026-07-19", "condition": "Nắng ráo", "temp_min_c": 29, "temp_max_c": 38, "rain_chance_pct": 15, "humidity_pct": 67}
+      ]
+    },
+    "SGN": {
+      "city_name": "TP. Hồ Chí Minh",
+      "summary": "Nắng mạnh, chiều có thể mưa ngắn.",
+      "travel_tip": "Uống đủ nước; tránh giờ trưa khi tham quan ngoài trời.",
+      "forecasts": [
+        {"date": "2026-07-15", "condition": "Nắng", "temp_min_c": 26, "temp_max_c": 34, "rain_chance_pct": 30, "humidity_pct": 78},
+        {"date": "2026-07-16", "condition": "Mưa rào chiều", "temp_min_c": 25, "temp_max_c": 32, "rain_chance_pct": 60, "humidity_pct": 85},
+        {"date": "2026-07-17", "condition": "Nắng", "temp_min_c": 26, "temp_max_c": 33, "rain_chance_pct": 25, "humidity_pct": 80},
+        {"date": "2026-07-18", "condition": "Nhiều mây", "temp_min_c": 26, "temp_max_c": 32, "rain_chance_pct": 45, "humidity_pct": 82},
+        {"date": "2026-07-19", "condition": "Nắng ráo", "temp_min_c": 27, "temp_max_c": 34, "rain_chance_pct": 20, "humidity_pct": 77}
+      ]
+    }
   }
 }

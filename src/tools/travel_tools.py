@@ -116,6 +116,147 @@ def apply_promo(code: str, subtotal: int) -> str:
     )
 
 
+def estimate_trip_cost(
+    origin: str,
+    destination: str,
+    depart_date: str,
+    passengers: int = 1,
+    nights: int = 2,
+    guests: int = 1,
+    hotel_tier: str = "standard",
+    promo_code: str = "",
+) -> str:
+    """
+    Ước tính tổng chi phí chuyến đi (vé + khách sạn + mã giảm giá) trong một lần gọi.
+    destination cũng dùng làm city_code khách sạn. promo_code: tùy chọn (SUMMER, FAMILY, NEWUSER).
+    """
+    simulated = simulated_observation("estimate_trip_cost")
+    if simulated:
+        return simulated
+
+    passengers = max(1, min(9, int(passengers)))
+    nights = max(1, int(nights))
+    guests = max(1, min(9, int(guests)))
+    tier = hotel_tier.strip().lower()
+    if tier not in ("standard", "deluxe"):
+        tier = "standard"
+
+    dest_code = normalize_city(destination)
+    data = _load_data()
+    orig = normalize_city(origin)
+    route_key = f"{orig}-{dest_code}"
+    route = data["routes"].get(route_key)
+    if not route:
+        return (
+            f"No flights found for route {orig}→{dest_code}. "
+            f"Available routes: {', '.join(data['routes'].keys())}"
+        )
+
+    flight_total = route["price_per_person_vnd"] * passengers
+    hotel = data["hotels"].get(dest_code)
+    if not hotel:
+        return f"No hotels in catalog for city code {dest_code}."
+
+    hotel_total = hotel[tier] * nights
+    subtotal = flight_total + hotel_total
+
+    lines = [
+        f"Trip estimate {orig}→{dest_code}, depart {depart_date}:",
+        f"- Flights: {route['price_per_person_vnd']:,} VND/person × {passengers} "
+        f"= {flight_total:,} VND ({route['airline']})",
+        f"- Hotel ({tier}): {hotel[tier]:,} VND/night × {nights} nights "
+        f"= {hotel_total:,} VND ({guests} guest(s))",
+        f"- Subtotal (before promo): {subtotal:,} VND",
+    ]
+
+    promo_code = (promo_code or "").strip()
+    if promo_code:
+        promo_out = apply_promo(promo_code, subtotal)
+        lines.append(f"- {promo_out}")
+        if "Invalid promo" in promo_out:
+            return "\n".join(lines)
+        final_match = re.search(r"=\s*([\d,]+)\s*VND\.?\s*$", promo_out)
+        if final_match:
+            lines.append(f"- Grand total after promo: {final_match.group(1)} VND")
+    else:
+        lines.append(f"- Grand total: {subtotal:,} VND (no promo applied)")
+
+    return "\n".join(lines)
+
+
+def get_weather_forecast(
+    destination: str,
+    start_date: str = "",
+    days: int = 3,
+) -> str:
+    """
+    Dự báo thời tiết mock tại điểm đến (không gọi API thật).
+
+    destination: tên thành phố hoặc mã IATA (Đà Nẵng, DAD, HCM, ...).
+    start_date: YYYY-MM-DD (tùy chọn); bỏ trống thì lấy từ ngày đầu trong catalog.
+    days: số ngày dự báo (1–7).
+    """
+    simulated = simulated_observation("get_weather_forecast")
+    if simulated:
+        return simulated
+
+    destination = destination.strip()
+    if not destination:
+        return "Weather error: destination is required."
+
+    days = max(1, min(7, int(days)))
+    city_code = normalize_city(destination)
+    data = _load_data()
+    weather_by_city = data.get("weather") or {}
+    weather = weather_by_city.get(city_code)
+    if not weather:
+        available = ", ".join(
+            f"{code} ({info.get('city_name', code)})"
+            for code, info in weather_by_city.items()
+        )
+        return (
+            f"No weather forecast (mock) for '{destination}' (code {city_code}). "
+            f"Available cities: {available or 'none'}."
+        )
+
+    all_days: List[Dict[str, Any]] = list(weather.get("forecasts") or [])
+    if not all_days:
+        return f"No forecast days in catalog for {city_code}."
+
+    start_date = start_date.strip()
+    if start_date:
+        start_idx = next(
+            (i for i, row in enumerate(all_days) if row.get("date") == start_date),
+            None,
+        )
+        if start_idx is None:
+            sample_dates = ", ".join(row["date"] for row in all_days[:3])
+            return (
+                f"No mock forecast for {city_code} on {start_date}. "
+                f"Sample dates in catalog: {sample_dates}."
+            )
+        slice_days = all_days[start_idx : start_idx + days]
+    else:
+        slice_days = all_days[:days]
+
+    city_name = weather.get("city_name", city_code)
+    lines = [
+        f"Weather forecast (mock data) for {city_name} ({city_code}):",
+        f"Overview: {weather.get('summary', 'N/A')}",
+    ]
+    for row in slice_days:
+        lines.append(
+            f"- {row['date']}: {row['condition']}, "
+            f"{row['temp_min_c']}–{row['temp_max_c']}°C, "
+            f"rain chance {row['rain_chance_pct']}%, humidity {row['humidity_pct']}%"
+        )
+    tip = weather.get("travel_tip")
+    if tip:
+        lines.append(f"Travel tip: {tip}")
+    lines.append("(Source: lab mock catalog — not live weather API.)")
+    return "\n".join(lines)
+
+
 def search_attractions(destination: str, query: str = "", limit: int = 5) -> str:
     """
     Search SerpAPI for landmarks and tourist attractions at a destination.

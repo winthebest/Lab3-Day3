@@ -24,6 +24,14 @@ sys.path.insert(0, str(ROOT))
 from chatbot import run_chatbot
 from src.agent.agent import ReActAgent
 from src.config import PROJECT_ROOT, load_project_env
+from src.core.llm_runtime import (
+    SIDEBAR_PROVIDERS,
+    api_key_configured,
+    get_effective_config,
+    get_env_defaults,
+    models_for_sidebar_provider,
+    set_session_llm,
+)
 from src.core.provider_factory import get_llm_provider
 from src.evaluation.metrics_report import (
     aggregate_history_reports,
@@ -62,6 +70,10 @@ EXAMPLE_QUERIES = {
         "Tôi muốn đi Đà Nẵng, hãy tìm vài địa danh và khu tham quan nổi bật."
     ),
     "💬 Tư vấn chung": "Đà Nẵng tháng 7 có gì hay, nên đi mấy ngày?",
+    "🌤 Thời tiết Đà Nẵng": (
+        "Tôi đi Đà Nẵng khởi hành 15/07/2026, 3 ngày 2 đêm. "
+        "Thời tiết dự báo thế nào, có mưa không?"
+    ),
 }
 
 
@@ -158,9 +170,59 @@ def _attach_evaluation(
     return payload
 
 
+def _render_llm_sidebar() -> Optional[str]:
+    """Chọn GPT hoặc Gemini + model; trả về thông báo lỗi nếu thiếu API key."""
+    st.subheader("LLM (GPT / Gemini)")
+    env_provider, env_model = get_env_defaults()
+    label_by_provider = {v: k for k, v in SIDEBAR_PROVIDERS.items()}
+    default_label = label_by_provider.get(env_provider, "GPT (OpenAI)")
+
+    if "llm_label" not in st.session_state:
+        st.session_state.llm_label = default_label
+    if "llm_model" not in st.session_state:
+        st.session_state.llm_model = env_model
+
+    labels = list(SIDEBAR_PROVIDERS.keys())
+    idx = labels.index(st.session_state.llm_label) if st.session_state.llm_label in labels else 0
+    llm_label = st.radio(
+        "Provider",
+        labels,
+        index=idx,
+        key="llm_provider_radio",
+    )
+    provider = SIDEBAR_PROVIDERS[llm_label]
+    model_options = models_for_sidebar_provider(provider)
+    if st.session_state.llm_model not in model_options:
+        st.session_state.llm_model = model_options[0]
+
+    llm_model = st.selectbox(
+        "Model",
+        model_options,
+        index=model_options.index(st.session_state.llm_model),
+        key="llm_model_select",
+    )
+    st.session_state.llm_label = llm_label
+    st.session_state.llm_model = llm_model
+
+    ok_openai = api_key_configured("openai")
+    ok_gemini = api_key_configured("google")
+    st.caption(
+        f"API key: OpenAI {'✅' if ok_openai else '❌'} · Gemini {'✅' if ok_gemini else '❌'}"
+    )
+
+    try:
+        set_session_llm(provider, llm_model)
+        st.success(f"Đang dùng **{llm_label}** · `{llm_model}`")
+        return None
+    except ValueError as e:
+        st.error(str(e))
+        return str(e)
+
+
 def _run_agent(query: str, max_steps: int, simulate: str = "none") -> Dict[str, Any]:
     t0 = time.perf_counter()
     llm = get_llm_provider()
+    provider, model_id = get_effective_config()
     agent = ReActAgent(llm=llm, max_steps=max_steps)
     with failure_simulation(simulate):
         answer = agent.run(query, print_trace=False)
@@ -171,6 +233,8 @@ def _run_agent(query: str, max_steps: int, simulate: str = "none") -> Dict[str, 
         "react_trace": agent.react_trace,
         "react_text": agent.format_react_trace(query),
         "model": llm.model_name,
+        "provider": provider,
+        "provider_label": "GPT (OpenAI)" if provider == "openai" else "Gemini (Google)",
         "wall_ms": wall_ms,
         "simulation": simulate,
     }
@@ -179,6 +243,7 @@ def _run_agent(query: str, max_steps: int, simulate: str = "none") -> Dict[str, 
 def _run_chatbot_mode(query: str) -> Dict[str, Any]:
     t0 = time.perf_counter()
     llm = get_llm_provider()
+    provider, _ = get_effective_config()
     answer = run_chatbot(query)
     wall_ms = int((time.perf_counter() - t0) * 1000)
     return {
@@ -187,6 +252,8 @@ def _run_chatbot_mode(query: str) -> Dict[str, Any]:
         "react_trace": [],
         "react_text": "",
         "model": llm.model_name,
+        "provider": provider,
+        "provider_label": "GPT (OpenAI)" if provider == "openai" else "Gemini (Google)",
         "wall_ms": wall_ms,
     }
 
@@ -268,13 +335,14 @@ def main() -> None:
     if "history" not in st.session_state:
         st.session_state.history = []
 
+    llm_error: Optional[str] = None
     with st.sidebar:
         st.header("Cấu hình")
-        provider = os.getenv("DEFAULT_PROVIDER", "?")
-        model = os.getenv("DEFAULT_MODEL", "?")
-        st.text(f"Provider: {provider}")
-        st.text(f"Model: {model}")
-        st.text(f"Log file: logs/{datetime.now():%Y-%m-%d}.log")
+        llm_error = _render_llm_sidebar()
+        env_p, env_m = get_env_defaults()
+        st.caption(f"Mặc định .env: {env_p} · `{env_m}`")
+        st.text(f"Log: logs/{datetime.now():%Y-%m-%d}.log")
+        st.divider()
 
         mode = st.radio("Chế độ", ["ReAct Agent", "Chatbot baseline"], index=0)
         max_steps = st.slider("max_steps (agent)", 2, 12, 8)
@@ -299,6 +367,11 @@ def main() -> None:
             st.session_state.history = []
             st.rerun()
 
+        st.divider()
+        st.markdown("**Tools**")
+        for t in get_tool_specs():
+            st.caption(f"`{t['name']}`")
+
     default_q = EXAMPLE_QUERIES["✅ Đà Nẵng + SUMMER (tính tổng chi phí)"]
     query = st.text_area(
         "Câu hỏi",
@@ -312,216 +385,233 @@ def main() -> None:
     compare_clicked = col_cmp.button("⇄ So sánh Chatbot + Agent", use_container_width=True)
 
     if run_clicked or compare_clicked:
-        logger.clear_session()
-        tracker.session_metrics.clear()
+        if llm_error:
+            st.error(f"Không chạy được: {llm_error}")
+        else:
+            _execute_query(compare_clicked, query, mode, max_steps, simulation_mode)
 
-        runs: List[Dict[str, Any]] = []
-        try:
-            with st.spinner("Đang gọi LLM..."):
-                if compare_clicked:
-                    logger.clear_session()
-                    tracker.session_metrics.clear()
-                    r_bot = _run_chatbot_mode(query)
-                    log_bot = logger.get_session_events()
-                    m_bot = list(tracker.session_metrics)
+    _render_latest_results(max_steps)
 
-                    logger.clear_session()
-                    tracker.session_metrics.clear()
-                    r_agent = _run_agent(query, max_steps, simulation_mode)
-                    log_agent = logger.get_session_events()
-                    m_agent = list(tracker.session_metrics)
 
-                    ts = datetime.now().isoformat(timespec="seconds")
-                    st.session_state.history.insert(
-                        0,
-                        _attach_evaluation(
-                            {**r_agent, "time": ts, "query": query},
-                            query=query,
-                            max_steps=max_steps,
-                            wall_ms=r_agent.get("wall_ms", 0),
-                            session_log=log_agent,
-                            metrics=m_agent,
-                        ),
-                    )
-                    st.session_state.history.insert(
-                        0,
-                        _attach_evaluation(
-                            {**r_bot, "time": ts, "query": query},
-                            query=query,
-                            max_steps=max_steps,
-                            wall_ms=r_bot.get("wall_ms", 0),
-                            session_log=log_bot,
-                            metrics=m_bot,
-                        ),
-                    )
-                    st.session_state.last_compare = True
-                    runs = []  # already saved
-                else:
-                    st.session_state.last_compare = False
-                    if mode.startswith("ReAct"):
-                        runs.append(_run_agent(query, max_steps, simulation_mode))
-                    else:
-                        runs.append(_run_chatbot_mode(query))
+def _execute_query(
+    compare_clicked: bool,
+    query: str,
+    mode: str,
+    max_steps: int,
+    simulation_mode: str,
+) -> None:
+    logger.clear_session()
+    tracker.session_metrics.clear()
 
-            for r in runs:
+    runs: List[Dict[str, Any]] = []
+    try:
+        with st.spinner("Đang gọi LLM..."):
+            if compare_clicked:
+                logger.clear_session()
+                tracker.session_metrics.clear()
+                r_bot = _run_chatbot_mode(query)
+                log_bot = logger.get_session_events()
+                m_bot = list(tracker.session_metrics)
+
+                logger.clear_session()
+                tracker.session_metrics.clear()
+                r_agent = _run_agent(query, max_steps, simulation_mode)
+                log_agent = logger.get_session_events()
+                m_agent = list(tracker.session_metrics)
+
+                ts = datetime.now().isoformat(timespec="seconds")
                 st.session_state.history.insert(
                     0,
                     _attach_evaluation(
-                        {
-                            "time": datetime.now().isoformat(timespec="seconds"),
-                            "query": query,
-                            **r,
-                        },
+                        {**r_agent, "time": ts, "query": query},
                         query=query,
                         max_steps=max_steps,
-                        wall_ms=r.get("wall_ms", 0),
-                        session_log=logger.get_session_events(),
-                        metrics=list(tracker.session_metrics),
+                        wall_ms=r_agent.get("wall_ms", 0),
+                        session_log=log_agent,
+                        metrics=m_agent,
                     ),
                 )
-        except Exception as e:
-            st.error(f"Lỗi: {e}")
-            logger.log_event("APP_ERROR", {"error": str(e)})
+                st.session_state.history.insert(
+                    0,
+                    _attach_evaluation(
+                        {**r_bot, "time": ts, "query": query},
+                        query=query,
+                        max_steps=max_steps,
+                        wall_ms=r_bot.get("wall_ms", 0),
+                        session_log=log_bot,
+                        metrics=m_bot,
+                    ),
+                )
+                st.session_state.last_compare = True
+                runs = []
+            else:
+                st.session_state.last_compare = False
+                if mode.startswith("ReAct"):
+                    runs.append(_run_agent(query, max_steps, simulation_mode))
+                else:
+                    runs.append(_run_chatbot_mode(query))
+
+        for r in runs:
             st.session_state.history.insert(
                 0,
-                {
-                    "time": datetime.now().isoformat(timespec="seconds"),
-                    "query": query,
-                    "mode": "error",
-                    "answer": str(e),
-                    "react_trace": [],
-                    "session_log": logger.get_session_events(),
-                    "metrics": [],
-                },
+                _attach_evaluation(
+                    {
+                        "time": datetime.now().isoformat(timespec="seconds"),
+                        "query": query,
+                        **r,
+                    },
+                    query=query,
+                    max_steps=max_steps,
+                    wall_ms=r.get("wall_ms", 0),
+                    session_log=logger.get_session_events(),
+                    metrics=list(tracker.session_metrics),
+                ),
             )
-
-    if st.session_state.history:
-        latest = st.session_state.history[0]
-        st.divider()
-        st.subheader("Kết quả mới nhất")
-
-        if st.session_state.get("last_compare") and len(st.session_state.history) >= 2:
-            bot = next((h for h in st.session_state.history if h.get("mode") == "chatbot"), None)
-            ag = next((h for h in st.session_state.history if h.get("mode") == "agent"), None)
-            if bot and ag:
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.markdown("### Chatbot")
-                    st.write(bot.get("answer", ""))
-                with c2:
-                    st.markdown("### ReAct Agent")
-                    if ag.get("simulation") and ag.get("simulation") != "none":
-                        st.caption(f"Simulation: `{ag.get('simulation')}`")
-                    st.write(ag.get("answer", ""))
-                latest = ag
-        else:
-            meta = f"**Chế độ:** `{latest.get('mode')}` · **Model:** `{latest.get('model', '-')}`"
-            if latest.get("simulation") and latest.get("simulation") != "none":
-                meta += f" · **Simulation:** `{latest.get('simulation')}`"
-            st.markdown(meta)
-            st.write(latest.get("answer", ""))
-
-        tab_react, tab_eval, tab_log, tab_file = st.tabs(
-            [
-                "🔄 ReAct Trace",
-                "📊 Evaluation (EVALUATION.md)",
-                "📋 Log phiên (JSON)",
-                "📁 File log (tail)",
-            ]
+    except Exception as e:
+        st.error(f"Lỗi: {e}")
+        logger.log_event("APP_ERROR", {"error": str(e)})
+        st.session_state.history.insert(
+            0,
+            {
+                "time": datetime.now().isoformat(timespec="seconds"),
+                "query": query,
+                "mode": "error",
+                "answer": str(e),
+                "react_trace": [],
+                "session_log": logger.get_session_events(),
+                "metrics": [],
+            },
         )
 
-        with tab_react:
-            if latest.get("react_text"):
-                st.code(latest["react_text"], language=None)
-            _render_react_cycles(latest.get("react_trace") or [])
 
-        with tab_eval:
-            st.caption(
-                "Theo EVALUATION.md: Token efficiency · Latency · Loop count · Failure analysis"
-            )
-            if st.session_state.get("last_compare"):
-                bot = next((h for h in st.session_state.history if h.get("mode") == "chatbot"), None)
-                ag = next((h for h in st.session_state.history if h.get("mode") == "agent"), None)
-                if bot and ag and bot.get("evaluation") and ag.get("evaluation"):
-                    ec1, ec2 = st.columns(2)
-                    with ec1:
-                        _render_evaluation_panel(bot["evaluation"], title="Chatbot")
-                    with ec2:
-                        _render_evaluation_panel(ag["evaluation"], title="ReAct Agent")
-                    st.markdown("##### So sánh nhanh")
-                    st.table(
-                        {
-                            "Metric": [
-                                "Total tokens",
-                                "Wall clock (ms)",
-                                "LLM calls",
-                                "Failures",
-                                "Reliability",
-                            ],
-                            "Chatbot": [
-                                bot["evaluation"]["token_efficiency"]["total_tokens"],
-                                bot["evaluation"]["latency"].get("wall_clock_ms"),
-                                bot["evaluation"]["token_efficiency"]["llm_calls"],
-                                bot["evaluation"]["failure_count"],
-                                bot["evaluation"]["reliability"],
-                            ],
-                            "Agent": [
-                                ag["evaluation"]["token_efficiency"]["total_tokens"],
-                                ag["evaluation"]["latency"].get("wall_clock_ms"),
-                                ag["evaluation"]["token_efficiency"]["llm_calls"],
-                                ag["evaluation"]["failure_count"],
-                                ag["evaluation"]["reliability"],
-                            ],
-                        }
-                    )
-            elif latest.get("evaluation"):
-                _render_evaluation_panel(latest["evaluation"])
-
-            agg = aggregate_history_reports(st.session_state.history, max_steps)
-            if agg.get("runs", 0) > 1:
-                st.divider()
-                st.markdown("##### Aggregate reliability (phiên Streamlit)")
-                a1, a2, a3 = st.columns(3)
-                a1.metric("Runs", agg["runs"])
-                a2.metric("Pass %", f"{agg.get('reliability_pct', 0)}%")
-                a3.metric("Avg tokens", agg.get("avg_total_tokens", 0))
-
-        with tab_log:
-            events = latest.get("session_log") or []
-            st.caption(f"{len(events)} events — đã ghi vào `logs/`")
-            for ev in events:
-                etype = ev.get("event", "?")
-                icon = "🔴" if "ERROR" in etype or (
-                    etype == "REACT_CYCLE"
-                    and _is_fail_observation(
-                        str((ev.get("data") or {}).get("observation", ""))
-                    )
-                ) else "🟢"
-                with st.expander(f"{icon} `{etype}` · {ev.get('timestamp', '')[:19]}"):
-                    st.json(ev.get("data", {}))
-
-            st.download_button(
-                "Tải log phiên (.json)",
-                data=json.dumps(events, ensure_ascii=False, indent=2),
-                file_name=f"session_log_{datetime.now():%H%M%S}.json",
-                mime="application/json",
-            )
-
-        with tab_file:
-            st.code(_read_log_tail(100), language="json")
-
-        with st.expander("Lịch sử phiên Streamlit"):
-            for i, h in enumerate(st.session_state.history[:5]):
-                st.markdown(f"**#{i + 1}** `{h.get('time')}` · {h.get('mode')} — {h.get('query', '')[:60]}...")
-
-    else:
+def _render_latest_results(max_steps: int) -> None:
+    if not st.session_state.history:
         st.info("Nhập câu hỏi và bấm **Chạy** hoặc **So sánh Chatbot + Agent**.")
+        return
 
-    with st.sidebar:
-        st.divider()
-        st.markdown("**Tools**")
-        for t in get_tool_specs():
-            st.caption(f"`{t['name']}`")
+    latest = st.session_state.history[0]
+    st.divider()
+    st.subheader("Kết quả mới nhất")
+
+    if st.session_state.get("last_compare") and len(st.session_state.history) >= 2:
+        bot = next((h for h in st.session_state.history if h.get("mode") == "chatbot"), None)
+        ag = next((h for h in st.session_state.history if h.get("mode") == "agent"), None)
+        if bot and ag:
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("### Chatbot")
+                st.caption(f"{bot.get('provider_label', '')} · `{bot.get('model', '')}`")
+                st.write(bot.get("answer", ""))
+            with c2:
+                st.markdown("### ReAct Agent")
+                st.caption(f"{ag.get('provider_label', '')} · `{ag.get('model', '')}`")
+                if ag.get("simulation") and ag.get("simulation") != "none":
+                    st.caption(f"Simulation: `{ag.get('simulation')}`")
+                st.write(ag.get("answer", ""))
+            latest = ag
+    else:
+        plabel = latest.get("provider_label") or latest.get("provider", "-")
+        meta = (
+            f"**Chế độ:** `{latest.get('mode')}` · "
+            f"**LLM:** {plabel} · `{latest.get('model', '-')}`"
+        )
+        if latest.get("simulation") and latest.get("simulation") != "none":
+            meta += f" · **Simulation:** `{latest.get('simulation')}`"
+        st.markdown(meta)
+        st.write(latest.get("answer", ""))
+
+    tab_react, tab_eval, tab_log, tab_file = st.tabs(
+        [
+            "🔄 ReAct Trace",
+            "📊 Evaluation (EVALUATION.md)",
+            "📋 Log phiên (JSON)",
+            "📁 File log (tail)",
+        ]
+    )
+
+    with tab_react:
+        if latest.get("react_text"):
+            st.code(latest["react_text"], language=None)
+        _render_react_cycles(latest.get("react_trace") or [])
+
+    with tab_eval:
+        st.caption(
+            "Theo EVALUATION.md: Token efficiency · Latency · Loop count · Failure analysis"
+        )
+        if st.session_state.get("last_compare"):
+            bot = next((h for h in st.session_state.history if h.get("mode") == "chatbot"), None)
+            ag = next((h for h in st.session_state.history if h.get("mode") == "agent"), None)
+            if bot and ag and bot.get("evaluation") and ag.get("evaluation"):
+                ec1, ec2 = st.columns(2)
+                with ec1:
+                    _render_evaluation_panel(bot["evaluation"], title="Chatbot")
+                with ec2:
+                    _render_evaluation_panel(ag["evaluation"], title="ReAct Agent")
+                st.markdown("##### So sánh nhanh")
+                st.table(
+                    {
+                        "Metric": [
+                            "Total tokens",
+                            "Wall clock (ms)",
+                            "LLM calls",
+                            "Failures",
+                            "Reliability",
+                        ],
+                        "Chatbot": [
+                            bot["evaluation"]["token_efficiency"]["total_tokens"],
+                            bot["evaluation"]["latency"].get("wall_clock_ms"),
+                            bot["evaluation"]["token_efficiency"]["llm_calls"],
+                            bot["evaluation"]["failure_count"],
+                            bot["evaluation"]["reliability"],
+                        ],
+                        "Agent": [
+                            ag["evaluation"]["token_efficiency"]["total_tokens"],
+                            ag["evaluation"]["latency"].get("wall_clock_ms"),
+                            ag["evaluation"]["token_efficiency"]["llm_calls"],
+                            ag["evaluation"]["failure_count"],
+                            ag["evaluation"]["reliability"],
+                        ],
+                    }
+                )
+        elif latest.get("evaluation"):
+            _render_evaluation_panel(latest["evaluation"])
+
+        agg = aggregate_history_reports(st.session_state.history, max_steps)
+        if agg.get("runs", 0) > 1:
+            st.divider()
+            st.markdown("##### Aggregate reliability (phiên Streamlit)")
+            a1, a2, a3 = st.columns(3)
+            a1.metric("Runs", agg["runs"])
+            a2.metric("Pass %", f"{agg.get('reliability_pct', 0)}%")
+            a3.metric("Avg tokens", agg.get("avg_total_tokens", 0))
+
+    with tab_log:
+        events = latest.get("session_log") or []
+        st.caption(f"{len(events)} events — đã ghi vào `logs/`")
+        for ev in events:
+            etype = ev.get("event", "?")
+            icon = "🔴" if "ERROR" in etype or (
+                etype == "REACT_CYCLE"
+                and _is_fail_observation(
+                    str((ev.get("data") or {}).get("observation", ""))
+                )
+            ) else "🟢"
+            with st.expander(f"{icon} `{etype}` · {ev.get('timestamp', '')[:19]}"):
+                st.json(ev.get("data", {}))
+
+        st.download_button(
+            "Tải log phiên (.json)",
+            data=json.dumps(events, ensure_ascii=False, indent=2),
+            file_name=f"session_log_{datetime.now():%H%M%S}.json",
+            mime="application/json",
+        )
+
+    with tab_file:
+        st.code(_read_log_tail(100), language="json")
+
+    with st.expander("Lịch sử phiên Streamlit"):
+        for i, h in enumerate(st.session_state.history[:5]):
+            st.markdown(f"**#{i + 1}** `{h.get('time')}` · {h.get('mode')} — {h.get('query', '')[:60]}...")
 
 
 if __name__ == "__main__":

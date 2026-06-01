@@ -9,7 +9,9 @@ from src.tools.registry import execute_tool
 from src.tools.failure_simulation import failure_simulation
 from src.tools.travel_tools import (
     apply_promo,
+    estimate_trip_cost,
     get_hotel_rate,
+    get_weather_forecast,
     normalize_city,
     search_flights,
 )
@@ -23,6 +25,51 @@ def test_normalize_city():
 def test_search_flights_sgn_dad():
     result = search_flights("SGN", "DAD", "2026-07-15", passengers=2)
     assert "3,000,000" in result or "3000000" in result.replace(",", "")
+
+
+def test_get_weather_forecast_danang():
+    out = get_weather_forecast("Đà Nẵng", start_date="2026-07-15", days=3)
+    assert "mock" in out.lower()
+    assert "2026-07-15" in out
+    assert "2026-07-16" in out
+    assert "Nắng" in out or "Mưa" in out
+
+
+def test_execute_tool_weather():
+    out = execute_tool(
+        "get_weather_forecast",
+        'destination="DAD", start_date="2026-07-15", days=2',
+    )
+    assert "Đà Nẵng" in out or "DAD" in out
+
+
+def test_weather_unknown_city():
+    out = get_weather_forecast("Nha Trang", days=2)
+    assert "No weather forecast" in out
+
+
+def test_estimate_trip_cost_with_promo():
+    out = estimate_trip_cost(
+        origin="SGN",
+        destination="DAD",
+        depart_date="2026-07-15",
+        passengers=2,
+        nights=2,
+        guests=2,
+        promo_code="SUMMER",
+    )
+    assert "Subtotal" in out
+    assert "SUMMER" in out
+    assert "Grand total" in out
+
+
+def test_execute_tool_estimate_trip():
+    out = execute_tool(
+        "estimate_trip_cost",
+        'origin="SGN", destination="DAD", depart_date="2026-07-15", '
+        "passengers=2, nights=2, promo_code=\"SUMMER\"",
+    )
+    assert "Trip estimate" in out
 
 
 def test_execute_tool_promo():
