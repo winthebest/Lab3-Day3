@@ -92,6 +92,9 @@ OPENAI_API_KEY=sk-...
 # Hoặc local (xem mục dưới)
 # DEFAULT_PROVIDER=local
 # LOCAL_MODEL_PATH=./models/Phi-3-mini-4k-instruct-q4.gguf
+
+# SerpAPI cho tool tìm địa danh / khu tham quan
+SERPAPI_API_KEY=...
 ```
 
 > Trên Windows, nếu key trong biến môi trường hệ thống lệch với `.env`, project dùng `load_dotenv(override=True)` trong `src/config.py`.
@@ -117,7 +120,24 @@ python main.py --mode chatbot
 
 # So sánh cùng một câu hỏi
 python main.py --mode compare -q "Tôi ở HCM, muốn đi Đà Nẵng 3 ngày 2 đêm, 2 người, khởi hành 15/07/2026, dùng mã SUMMER. Tổng chi phí ước tính?"
+
+# Tìm địa danh / khu tham quan bằng SerpAPI
+python main.py --mode agent -q "Tôi muốn đi Đà Nẵng, hãy tìm vài địa danh và khu tham quan nổi bật."
 ```
+
+**Mô phỏng lỗi có kiểm soát:**
+
+```bash
+# Tool timeout giả lập
+python main.py --mode agent --simulate tool_timeout
+
+# Không tìm thấy dữ liệu chuyến bay / khách sạn / promo
+python main.py --mode agent --simulate flight_not_found
+python main.py --mode agent --simulate hotel_not_found
+python main.py --mode agent --simulate promo_not_found
+```
+
+Trên Streamlit, dùng mục **Mô phỏng lỗi (agent)** trong sidebar. Các lỗi mô phỏng được ghi vào ReAct trace, log JSON và tab Evaluation như lỗi thật.
 
 **Test tool (không cần API):**
 

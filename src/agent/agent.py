@@ -37,6 +37,7 @@ Rules:
 - Dates: YYYY-MM-DD. "3 ngày 2 đêm" means nights=2 for hotel.
 - Multiply flight price by passengers; hotel by nights (not days).
 - After tools return numbers, compute subtotal then use apply_promo if user gave a code.
+- If the user asks about places to visit, attractions, landmarks, or sightseeing, use search_attractions.
 
 Output format (no markdown fences) — ALWAYS include Thought before Action or Final Answer:
 Thought: <reasoning>

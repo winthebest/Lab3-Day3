@@ -8,6 +8,7 @@ TOOL_REGISTRY: Dict[str, ToolFn] = {
     "search_flights": travel_tools.search_flights,
     "get_hotel_rate": travel_tools.get_hotel_rate,
     "apply_promo": travel_tools.apply_promo,
+    "search_attractions": travel_tools.search_attractions,
 }
 
 TOOL_SPECS: List[Dict[str, str]] = [
@@ -33,6 +34,15 @@ TOOL_SPECS: List[Dict[str, str]] = [
         "description": (
             "Apply discount code on subtotal VND. Codes: SUMMER (10%), FAMILY (500k fixed), NEWUSER (5%). "
             'Example: apply_promo(code="SUMMER", subtotal=8400000)'
+        ),
+    },
+    {
+        "name": "search_attractions",
+        "description": (
+            "Search SerpAPI for landmarks, attractions, and sightseeing places at a destination. "
+            "Use when the user asks what to visit, where to go, or tourist spots. "
+            "Args: destination (city/province/place), query (optional), limit (int 1-10). "
+            'Example: search_attractions(destination="Đà Nẵng", query="địa danh khu tham quan Đà Nẵng", limit=5)'
         ),
     },
 ]

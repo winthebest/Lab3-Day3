@@ -17,6 +17,19 @@ So sánh chatbot (dễ fail kiểu khác):
 python main.py --mode chatbot -q "CÂU_HỎI_Ở_DƯỚI"
 ```
 
+## Mô phỏng lỗi có kiểm soát
+
+Ngoài việc tạo lỗi bằng câu hỏi, có thể ép tool trả về lỗi giả lập để demo ổn định:
+
+```cmd
+python main.py --mode agent --simulate tool_timeout
+python main.py --mode agent --simulate flight_not_found
+python main.py --mode agent --simulate hotel_not_found
+python main.py --mode agent --simulate promo_not_found
+```
+
+Trên Streamlit, chọn tình huống trong sidebar ở mục **Mô phỏng lỗi (agent)**.
+
 ---
 
 ## 1. Tool trả lỗi — route không có trong mock

@@ -93,6 +93,14 @@ def classify_failures(
                     "detail": obs[:120],
                 }
             )
+        if "timeout" in obs.lower():
+            errors.append(
+                {
+                    "code": "TOOL_TIMEOUT",
+                    "cycle": str(n),
+                    "detail": obs[:120],
+                }
+            )
         if any(
             x in obs.lower()
             for x in ("no flights", "no hotels", "invalid promo", "not found")
@@ -192,7 +200,13 @@ def build_evaluation_report(
     reliability = "PASS"
     if failures:
         reliability = "FAIL" if any(
-            f["code"] in ("TIMEOUT_MAX_STEPS", "PARSER_ERROR", "HALLUCINATION_TOOL")
+            f["code"]
+            in (
+                "TIMEOUT_MAX_STEPS",
+                "TOOL_TIMEOUT",
+                "PARSER_ERROR",
+                "HALLUCINATION_TOOL",
+            )
             for f in failures
         ) else "DEGRADED"
 

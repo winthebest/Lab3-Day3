@@ -11,6 +11,7 @@ from src.config import load_project_env
 from chatbot import run_chatbot
 from src.agent.agent import ReActAgent
 from src.core.provider_factory import get_llm_provider
+from src.tools.failure_simulation import SIMULATION_OPTIONS, failure_simulation
 
 
 DEFAULT_QUERY = (
@@ -19,11 +20,17 @@ DEFAULT_QUERY = (
 )
 
 
-def run_agent(query: str, max_steps: int = 8, show_react: bool = True) -> str:
+def run_agent(
+    query: str,
+    max_steps: int = 8,
+    show_react: bool = True,
+    simulate: str = "none",
+) -> str:
     load_project_env()
     llm = get_llm_provider()
     agent = ReActAgent(llm=llm, max_steps=max_steps)
-    return agent.run(query, print_trace=show_react)
+    with failure_simulation(simulate):
+        return agent.run(query, print_trace=show_react)
 
 
 def main():
@@ -37,6 +44,12 @@ def main():
     parser.add_argument("--query", "-q", default=DEFAULT_QUERY)
     parser.add_argument("--max-steps", type=int, default=8)
     parser.add_argument(
+        "--simulate",
+        choices=list(SIMULATION_OPTIONS.keys()),
+        default="none",
+        help="Force a tool failure scenario for ReAct agent runs.",
+    )
+    parser.add_argument(
         "--no-react-trace",
         action="store_true",
         help="Ẩn trace Thought/Action/Observation trên console",
@@ -49,7 +62,7 @@ def main():
         print(run_chatbot(args.query))
     elif args.mode == "agent":
         print("--- Mode: ReAct Travel Agent ---\n")
-        answer = run_agent(args.query, args.max_steps, show_react)
+        answer = run_agent(args.query, args.max_steps, show_react, args.simulate)
         if show_react:
             print("\n--- Kết quả ---\n")
         print(answer)
@@ -57,7 +70,7 @@ def main():
         print("=== CHATBOT ===\n")
         print(run_chatbot(args.query))
         print("\n=== REACT AGENT ===\n")
-        answer = run_agent(args.query, args.max_steps, show_react)
+        answer = run_agent(args.query, args.max_steps, show_react, args.simulate)
         if show_react:
             print("\n--- Kết quả ---\n")
         print(answer)

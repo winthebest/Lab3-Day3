@@ -2,9 +2,14 @@ import ast
 import json
 import os
 import re
-from typing import Any, Dict
+from typing import Any, Dict, List
+
+import requests
+
+from src.tools.failure_simulation import simulated_observation
 
 _DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "travel_data.json")
+_SERPAPI_URL = "https://serpapi.com/search.json"
 
 
 def _load_data() -> Dict[str, Any]:
@@ -29,6 +34,10 @@ def search_flights(
     origin/destination: IATA hoặc tên thành phố (SGN, DAD, HCM, Đà Nẵng).
     date: YYYY-MM-DD. passengers: 1–9.
     """
+    simulated = simulated_observation("search_flights")
+    if simulated:
+        return simulated
+
     passengers = max(1, min(9, int(passengers)))
     orig = normalize_city(origin)
     dest = normalize_city(destination)
@@ -59,6 +68,10 @@ def get_hotel_rate(
     tier: str = "standard",
 ) -> str:
     """city: IATA hoặc tên. nights: số đêm. tier: standard | deluxe."""
+    simulated = simulated_observation("get_hotel_rate")
+    if simulated:
+        return simulated
+
     nights = max(1, int(nights))
     guests = max(1, min(9, int(guests)))
     tier = tier.strip().lower()
@@ -81,6 +94,10 @@ def get_hotel_rate(
 
 def apply_promo(code: str, subtotal: int) -> str:
     """code: SUMMER, FAMILY, NEWUSER. subtotal: VND trước giảm."""
+    simulated = simulated_observation("apply_promo")
+    if simulated:
+        return simulated
+
     subtotal = int(subtotal)
     data = _load_data()
     promo = data["promos"].get(code.strip().upper())
@@ -97,6 +114,72 @@ def apply_promo(code: str, subtotal: int) -> str:
         f"Promo {code.upper()}: {promo['description']}. "
         f"Subtotal {subtotal:,} VND − discount {discount:,} VND = {final:,} VND."
     )
+
+
+def search_attractions(destination: str, query: str = "", limit: int = 5) -> str:
+    """
+    Search SerpAPI for landmarks and tourist attractions at a destination.
+
+    destination: city/province/place name. query: optional search intent.
+    limit: number of results to summarize.
+    """
+    simulated = simulated_observation("search_attractions")
+    if simulated:
+        return simulated
+
+    api_key = os.getenv("SERPAPI_API_KEY")
+    if not api_key:
+        return "SerpAPI error: missing SERPAPI_API_KEY in environment or .env file."
+
+    destination = destination.strip()
+    if not destination:
+        return "SerpAPI error: destination is required."
+
+    limit = max(1, min(10, int(limit)))
+    search_query = query.strip() or f"địa danh khu tham quan du lịch {destination}"
+    if destination.lower() not in search_query.lower():
+        search_query = f"{search_query} {destination}"
+
+    params = {
+        "engine": "google",
+        "q": search_query,
+        "api_key": api_key,
+        "hl": "vi",
+        "gl": "vn",
+    }
+    response = requests.get(_SERPAPI_URL, params=params, timeout=12)
+    response.raise_for_status()
+    payload = response.json()
+
+    results: List[Dict[str, Any]] = []
+    for item in payload.get("local_results", {}).get("places", []):
+        results.append(
+            {
+                "title": item.get("title"),
+                "snippet": item.get("description") or item.get("type"),
+                "link": item.get("website") or item.get("gps_coordinates"),
+            }
+        )
+
+    for item in payload.get("organic_results", []):
+        results.append(
+            {
+                "title": item.get("title"),
+                "snippet": item.get("snippet"),
+                "link": item.get("link"),
+            }
+        )
+
+    clean = [r for r in results if r.get("title")][:limit]
+    if not clean:
+        return f"No attractions found by SerpAPI for destination '{destination}'."
+
+    lines = [f"SerpAPI attractions for {destination}:"]
+    for idx, item in enumerate(clean, start=1):
+        snippet = f" - {item['snippet']}" if item.get("snippet") else ""
+        link = f" ({item['link']})" if item.get("link") else ""
+        lines.append(f"{idx}. {item['title']}{snippet}{link}")
+    return "\n".join(lines)
 
 
 def parse_tool_args(arg_string: str) -> Dict[str, Any]:

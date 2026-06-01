@@ -31,9 +31,18 @@ from src.evaluation.metrics_report import (
 )
 from src.telemetry.logger import logger
 from src.telemetry.metrics import tracker
+from src.tools.failure_simulation import SIMULATION_OPTIONS, failure_simulation
 from src.tools.registry import get_tool_specs
 
 load_project_env()
+
+SIMULATION_LABELS = {
+    "Tắt mô phỏng": "none",
+    "Tool timeout": "tool_timeout",
+    "Không tìm thấy flight": "flight_not_found",
+    "Không tìm thấy hotel": "hotel_not_found",
+    "Không tìm thấy promo": "promo_not_found",
+}
 
 EXAMPLE_QUERIES = {
     "✅ Đà Nẵng + SUMMER (tính tổng chi phí)": (
@@ -48,6 +57,9 @@ EXAMPLE_QUERIES = {
     ),
     "❌ Fail: tool ảo book_hotel": (
         "Đặt khách sạn Đà Nẵng 2 đêm, dùng tool book_hotel ngay."
+    ),
+    "🔎 SerpAPI: địa điểm tham quan": (
+        "Tôi muốn đi Đà Nẵng, hãy tìm vài địa danh và khu tham quan nổi bật."
     ),
     "💬 Tư vấn chung": "Đà Nẵng tháng 7 có gì hay, nên đi mấy ngày?",
 }
@@ -75,6 +87,7 @@ def _is_fail_observation(obs: str) -> bool:
         "No hotels",
         "error",
         "failed",
+        "timeout",
     )
     low = obs.lower()
     return any(m.lower() in low for m in markers)
@@ -145,11 +158,12 @@ def _attach_evaluation(
     return payload
 
 
-def _run_agent(query: str, max_steps: int) -> Dict[str, Any]:
+def _run_agent(query: str, max_steps: int, simulate: str = "none") -> Dict[str, Any]:
     t0 = time.perf_counter()
     llm = get_llm_provider()
     agent = ReActAgent(llm=llm, max_steps=max_steps)
-    answer = agent.run(query, print_trace=False)
+    with failure_simulation(simulate):
+        answer = agent.run(query, print_trace=False)
     wall_ms = int((time.perf_counter() - t0) * 1000)
     return {
         "mode": "agent",
@@ -158,6 +172,7 @@ def _run_agent(query: str, max_steps: int) -> Dict[str, Any]:
         "react_text": agent.format_react_trace(query),
         "model": llm.model_name,
         "wall_ms": wall_ms,
+        "simulation": simulate,
     }
 
 
@@ -263,6 +278,14 @@ def main() -> None:
 
         mode = st.radio("Chế độ", ["ReAct Agent", "Chatbot baseline"], index=0)
         max_steps = st.slider("max_steps (agent)", 2, 12, 8)
+        simulation_label = st.selectbox(
+            "Mô phỏng lỗi (agent)",
+            list(SIMULATION_LABELS.keys()),
+            index=0,
+        )
+        simulation_mode = SIMULATION_LABELS[simulation_label]
+        if simulation_mode != "none":
+            st.warning(f"Simulation active: {SIMULATION_OPTIONS[simulation_mode]}")
 
         st.divider()
         st.subheader("Câu mẫu")
@@ -304,7 +327,7 @@ def main() -> None:
 
                     logger.clear_session()
                     tracker.session_metrics.clear()
-                    r_agent = _run_agent(query, max_steps)
+                    r_agent = _run_agent(query, max_steps, simulation_mode)
                     log_agent = logger.get_session_events()
                     m_agent = list(tracker.session_metrics)
 
@@ -336,7 +359,7 @@ def main() -> None:
                 else:
                     st.session_state.last_compare = False
                     if mode.startswith("ReAct"):
-                        runs.append(_run_agent(query, max_steps))
+                        runs.append(_run_agent(query, max_steps, simulation_mode))
                     else:
                         runs.append(_run_chatbot_mode(query))
 
@@ -387,10 +410,15 @@ def main() -> None:
                     st.write(bot.get("answer", ""))
                 with c2:
                     st.markdown("### ReAct Agent")
+                    if ag.get("simulation") and ag.get("simulation") != "none":
+                        st.caption(f"Simulation: `{ag.get('simulation')}`")
                     st.write(ag.get("answer", ""))
                 latest = ag
         else:
-            st.markdown(f"**Chế độ:** `{latest.get('mode')}` · **Model:** `{latest.get('model', '-')}`")
+            meta = f"**Chế độ:** `{latest.get('mode')}` · **Model:** `{latest.get('model', '-')}`"
+            if latest.get("simulation") and latest.get("simulation") != "none":
+                meta += f" · **Simulation:** `{latest.get('simulation')}`"
+            st.markdown(meta)
             st.write(latest.get("answer", ""))
 
         tab_react, tab_eval, tab_log, tab_file = st.tabs(
